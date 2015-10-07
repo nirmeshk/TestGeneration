@@ -279,8 +279,27 @@ function constraints(filePath)
 	});
 }
 
-function parseBooleanExpression(node){
-	if(node.type !== 'BinaryExpression') return false;
+function parseBooleanExpression(node, funcName, params){
+	var binEquality = node.type === 'BinaryExpression' 
+					&& ["==", "<", "!=", ">"].indexOf(node.operator) > -1 
+					&& node.left.type == 'Identifier' 
+					&& params.indexOf( child.left.name ) > -1 ;
+
+	if(!binEquality) return false;
+
+	var constraints = [];
+
+	operandType = typeof node.right.value;
+	
+	switch(operandType) {
+	    case 'string': 
+	        break;
+	    case 'number':
+	        code block
+	        break;
+	    default:
+	    	//undefined
+	}
 }
 
 function parseLogicalExpression(node){
