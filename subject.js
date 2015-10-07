@@ -1,7 +1,7 @@
 var fs = require("fs");
 
 function inc(p, q){
-   if(q ==undefined) q =1;
+   if(q == undefined) q =1;
    if( p < 0 )
    {
    	p = -p;
