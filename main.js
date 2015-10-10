@@ -168,15 +168,16 @@ function generateMockFsTestCases (kind ,funcName,args)
 		}
 	}
 
-	if(kind.pathWithContent)
+	if( kind.pathWithContent )
 	{	
 		for (var attrname in mockFileLibrary.pathWithContent) { 
 			mergedFS[attrname] = mockFileLibrary.pathWithContent[attrname]; 
 		}
 	}
 
+	
 	testCase += "mock(" + JSON.stringify(mergedFS) + ");\n";
-	testCase += "\tsubject.{0}({1});\n".format(funcName, args );
+	testCase += "\tsubject.{0}({1});\n".format(funcName, args);
 	testCase += "mock.restore();\n";
 	return testCase;
 }
@@ -268,6 +269,37 @@ function parseCallExpression(child, funcName, params, buf){
 				}
 			}
 			break;
+	}
+
+	if(child.callee.property.name === "indexOf" && child.arguments[0].type == 'Literal' ){
+		for( var p =0; p < params.length; p++ ) {
+			if( child.callee.object.name == params[p] ) {
+				
+				functionConstraints[funcName].constraints.push( 
+				new Constraint(
+				{
+					ident: params[p],
+					// A fake path to a file
+					value: '"' + child.arguments[0].value + '"',
+					funcName: funcName,
+					kind: "string",
+					operator : child.operator,
+					expression: expression
+				}));
+
+				functionConstraints[funcName].constraints.push( 
+				new Constraint(
+				{
+					ident: params[p],
+					// A fake path to a file
+					value: '"asdasd' + child.arguments[0].value + '"',
+					funcName: funcName,
+					kind: "string",
+					operator : child.operator,
+					expression: expression
+				}));
+			}
+		}
 	}
 }
 
