@@ -11,10 +11,8 @@ function main()
 {
 	var args = process.argv.slice(2);
 
-	if( args.length == 0 )
-	{
-		args = ["subject.js"];
-	}
+	if( args.length == 0 ) args = ["subject.js"];
+
 	var filePath = args[0];
 
 	constraints(filePath);
@@ -50,15 +48,15 @@ function fakeDemo()
 	console.log( faker.phone.phoneFormats() );
 }
 
-var functionConstraints =
-{
-}
+var functionConstraints = {}
 
 var mockFileLibrary = 
 {
-	pathExists:
-	{
-		'path/fileExists': {}
+	pathExists:{
+		'path/fileExists' : {},
+	},
+	pathWithContent:{
+		'path/fileExists' : { file : 'some random text content'},
 	},
 	fileWithContent:
 	{
@@ -103,63 +101,83 @@ function generateTestCases()
 			params[paramName] = ['\'\''];
 		}
 
-		// Something where we run the all possible combination of indent values.
-		// indent : [list of values] 
-
-		// handle non-mock based constraints
-		for( var c = 0; c < constraints.length; c++ )
-		{
-			var constraint = constraints[c];
-			
-			if( params.hasOwnProperty( constraint.ident ) )
-			{
-				params[constraint.ident].push(constraint.value);
-			}
-		}
-
-
-		console.log(params);
-
-		var result = allPossibleCases( Object.keys(params).map(function(x) {return params[x]}) );
-
-		//console.log(result);
-
-		console.log("############");
-		console.log(allPossibleCases([[1,2,3],[4,5]]));
-
+		//A map that contains the file system information
+		var fileWithContent = _.some(constraints, {kind: 'fileWithContent'})
+		var pathExists = _.some(constraints, {kind: 'fileExists'})
+		var pathWithContent = _.some(constraints, {kind: 'pathWithContent'})
 		
-		//result.forEach(console.log);
-
-		for(var i = result.length - 1 ; i >= 0 ; i-- ){
-			content += "subject.{0}({1});\n".format(funcName, result[i].split('|').join(',') )
+		var kind = {
+			'fileWithContent': fileWithContent ,
+			'pathExists': pathExists ,
+			'pathWithContent' : pathWithContent
 		}
-	}
 
+		if(_.some([fileWithContent, pathExists, pathWithContent])){
+			// plug-in values for parameters
+			for( var c = 0; c < constraints.length; c++ )
+			{
+				var constraint = constraints[c];
+				if( params.hasOwnProperty( constraint.ident ) )
+				{
+					params[constraint.ident] = constraint.value;
+				}
+			}
+			var args = Object.keys(params).map( function(k) {return params[k]; }).join(",");	
+			
+			content += generateMockFsTestCases(kind, funcName, args);
+
+		} else {
+			// handle non-mock based constraints
+			for( var c = 0; c < constraints.length; c++ )
+			{
+				var constraint = constraints[c];
+				// Something where we run the all possible combination of indent values.
+				// indent : [list of values]		
+				if( params.hasOwnProperty( constraint.ident ) )
+				{
+					params[constraint.ident].push(constraint.value);
+				}
+			}
+
+			var result = allPossibleCases(Object.keys(params).map(function(x) {return params[x]}));
+			for(var i = result.length - 1 ; i >= 0 ; i-- ){
+				content += "subject.{0}({1});\n".format(funcName, result[i].split('|').join(',') )
+			}	
+		}		
+	}
 	fs.writeFileSync('test.js', content, "utf8");
 }
 
-function generateMockFsTestCases (pathExists,fileWithContent,funcName,args) 
+function generateMockFsTestCases (kind ,funcName,args) 
 {
 	var testCase = "";
 	// Build mock file system based on constraints.
 	var mergedFS = {};
-	if( pathExists )
+
+	if( kind.pathExists )
 	{
-		for (var attrname in mockFileLibrary.pathExists) { mergedFS[attrname] = mockFileLibrary.pathExists[attrname]; }
+		for (var attrname in mockFileLibrary.pathExists) { 
+			mergedFS[attrname] = mockFileLibrary.pathExists[attrname]; 
+		}
 	}
-	if( fileWithContent )
+	
+	if( kind.fileWithContent )
 	{
-		for (var attrname in mockFileLibrary.fileWithContent) { mergedFS[attrname] = mockFileLibrary.fileWithContent[attrname]; }
+		for (var attrname in mockFileLibrary.fileWithContent) { 
+			mergedFS[attrname] = mockFileLibrary.fileWithContent[attrname]; 
+		}
 	}
 
-	testCase += 
-	"mock(" +
-		JSON.stringify(mergedFS)
-		+
-	");\n";
+	if(kind.pathWithContent)
+	{	
+		for (var attrname in mockFileLibrary.pathWithContent) { 
+			mergedFS[attrname] = mockFileLibrary.pathWithContent[attrname]; 
+		}
+	}
 
+	testCase += "mock(" + JSON.stringify(mergedFS) + ");\n";
 	testCase += "\tsubject.{0}({1});\n".format(funcName, args );
-	testCase+="mock.restore();\n";
+	testCase += "mock.restore();\n";
 	return testCase;
 }
 
@@ -181,32 +199,75 @@ function constraints(filePath)
 			traverse(node, function(child)
 			{	
 				parseBooleanExpression(child, funcName, params, buf);
+				parseCallExpression(child, funcName, params, buf);
 			});
 		}
 	});
 }
 
-function parseCallExpression(child, functionName, params, buf){
-	if(child.type !== 'CallExpression') return false;
-	if( child.type == "CallExpression" && 
-		child.callee.property &&
-		child.callee.property.name =="readFileSync" )
-
-	for( var p =0; p < params.length; p++ )
-	{
-		if( child.arguments[0].name == params[p] )
-		{
-			functionConstraints[funcName].constraints.push( 
-			new Constraint(
+function parseCallExpression(child, funcName, params, buf){
+	if(!(child.type === "CallExpression" && child.callee.property)) return false;
+	
+	// get expression from original source code:
+	var expression = buf.substring(child.range[0], child.range[1]);
+	
+	switch(child.callee.property.name){
+		case "readFileSync":
+			for( var p =0; p < params.length; p++ )
 			{
-				ident: params[p],
-				value:  "'pathContent/file1'",
-				funcName: funcName,
-				kind: "fileWithContent",
-				operator : child.operator,
-				expression: expression
-			}));
-		}
+				if( child.arguments[0].name == params[p] )
+				{
+					functionConstraints[funcName].constraints.push( 
+					new Constraint(
+					{
+						ident: params[p],
+						value:  "'pathContent/file1'",
+						funcName: funcName,
+						kind: "fileWithContent",
+						operator : child.operator,
+						expression: expression
+					}));
+				}
+			}
+			break;
+		case "existsSync":
+			for( var p =0; p < params.length; p++ )
+			{
+				if( child.arguments[0].name == params[p] )
+				{
+					functionConstraints[funcName].constraints.push( 
+					new Constraint(
+					{
+						ident: params[p],
+						// A fake path to a file
+						value:  "'path/fileExists'",
+						funcName: funcName,
+						kind: "fileExists",
+						operator : child.operator,
+						expression: expression
+					}));
+				}
+			}
+			break;
+		case "readdirSync":
+			for( var p =0; p < params.length; p++ )
+			{
+				if( child.arguments[0].name == params[p] )
+				{
+					functionConstraints[funcName].constraints.push( 
+					new Constraint(
+					{
+						ident: params[p],
+						// A fake path to a file
+						value:  "'path/fileExists'",
+						funcName: funcName,
+						kind: "pathWithContent",
+						operator : child.operator,
+						expression: expression
+					}));
+				}
+			}
+			break;
 	}
 }
 
