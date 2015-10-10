@@ -125,9 +125,10 @@ function generateTestCases()
 		//console.log(result);
 
 		console.log("############");
+		console.log(allPossibleCases([[1,2,3],[4,5]]));
 
 		
-		result.forEach(console.log);
+		//result.forEach(console.log);
 
 		for(var i = result.length - 1 ; i >= 0 ; i-- ){
 			content += "subject.{0}({1});\n".format(funcName, result[i].split('|').join(',') )
@@ -179,130 +180,131 @@ function constraints(filePath)
 			// Check for expressions using argument.
 			traverse(node, function(child)
 			{	
-				var binEquality = child.type === 'BinaryExpression' 
-					&& ["==", "<", "!=", ">"].indexOf(child.operator) > -1 
-					&& child.left.type == 'Identifier' 
-					&& params.indexOf( child.left.name ) > -1 ;
-
-				var strEquality = binEquality && typeof child.right.value === 'string';
-				var intEquality = binEquality && typeof child.right.value === 'number';
-
-				// get expression from original source code:
-				if(binEquality){
-					var expression = buf.substring(child.range[0], child.range[1]);
-					var rightHand = buf.substring(child.right.range[0], child.right.range[1])
-				}
-
-				if( strEquality ) {		
-					functionConstraints[funcName].constraints.push( 
-					new Constraint(
-					{
-						ident: child.left.name,
-						value: '"' + child.right.value + '"', 
-						funcName: funcName,
-						kind: "string",
-						operator : child.operator,
-						expression: expression
-					}));
-
-					functionConstraints[funcName].constraints.push( 
-					new Constraint(
-					{
-						ident: child.left.name,
-						value: '"' + Random.string()(engine, child.right.value.length) + '"' ,
-						funcName: funcName,
-						kind: "string",
-						operator : child.operator,
-						expression: expression
-					}));
-
-				} else if( intEquality ) {
-
-					// case 1: Pass the same value to satisfy equality
-					functionConstraints[funcName].constraints.push( 
-					new Constraint(
-					{
-						ident: child.left.name,
-						value: parseInt(rightHand, 10),
-						funcName: funcName,
-						kind: "integer",
-						operator : child.operator,
-						expression: expression
-					}));
-
-					// case 2: Pass rightHand - 1 to satisfy '<' and '!='
-					functionConstraints[funcName].constraints.push( 
-					new Constraint(
-					{
-						ident: child.left.name,
-						value: parseInt(rightHand, 10) - 1,
-						funcName: funcName,
-						kind: "integer",
-						operator : child.operator,
-						expression: expression
-					}));
-
-					// case 3: Pass rightHand + 1 to satisfy '>' and '!='
-					functionConstraints[funcName].constraints.push( 
-					new Constraint(
-					{
-						ident: child.left.name,
-						value: parseInt(rightHand, 10) + 1,
-						funcName: funcName,
-						kind: "integer",
-						operator : child.operator,
-						expression: expression
-					}));
-
-				} else if ( binEquality ) {
-					// Add two values : one which satisfies the branch and one which does not.
-					functionConstraints[funcName].constraints.push( 
-					new Constraint(
-					{
-						ident: child.left.name,
-						value: rightHand,
-						funcName: funcName,
-						kind: "undefined",
-						operator : child.operator,
-						expression: expression
-					}));
-				}
-
-				var logicalAnd = child.type === 'LogicalExpression' && child.operator === '&&';
-
-				if(logicalAnd){
-					console.log("---------");
-				}
-
+				parseBooleanExpression(child, funcName, params, buf);
 			});
 		}
 	});
 }
 
-function parseBooleanExpression(node, funcName, params){
-	var binEquality = node.type === 'BinaryExpression' 
-					&& ["==", "<", "!=", ">"].indexOf(node.operator) > -1 
-					&& node.left.type == 'Identifier' 
+function parseCallExpression(child, functionName, params, buf){
+	if(child.type !== 'CallExpression') return false;
+	if( child.type == "CallExpression" && 
+		child.callee.property &&
+		child.callee.property.name =="readFileSync" )
+
+	for( var p =0; p < params.length; p++ )
+	{
+		if( child.arguments[0].name == params[p] )
+		{
+			functionConstraints[funcName].constraints.push( 
+			new Constraint(
+			{
+				ident: params[p],
+				value:  "'pathContent/file1'",
+				funcName: funcName,
+				kind: "fileWithContent",
+				operator : child.operator,
+				expression: expression
+			}));
+		}
+	}
+}
+
+function parseBooleanExpression(child, funcName, params, buf){
+
+	var binEquality = child.type === 'BinaryExpression' 
+					&& ["==", "<", "!=", ">"].indexOf(child.operator) > -1 
+					&& child.left.type === 'Identifier' 
 					&& params.indexOf( child.left.name ) > -1 ;
 
 	if(!binEquality) return false;
 
 	var constraints = [];
 
-	operandType = typeof node.right.value;
+	operandType = typeof child.right.value;
 	
+	// get expression from original source code:
+	var expression = buf.substring(child.range[0], child.range[1]);
+	var rightHand = buf.substring(child.right.range[0], child.right.range[1]);
+
+	console.log(operandType)
+
 	switch(operandType) {
 	    case 'string': 
+	    	functionConstraints[funcName].constraints.push( 
+			new Constraint(
+			{
+				ident: child.left.name,
+				value: rightHand, 
+				funcName: funcName,
+				kind: "string",
+				operator : child.operator,
+				expression: expression
+			}));
+
+			functionConstraints[funcName].constraints.push( 
+			new Constraint(
+			{
+				ident: child.left.name,
+				value: '"' + Random.string()(engine, rightHand.length) + '"',
+				funcName: funcName,
+				kind: "string",
+				operator : child.operator,
+				expression: expression
+			}));
 	        break;
-	    case 'number':
-	        code block
+	    case 'number':	        
+	        // case 1: Pass the same value to satisfy equality
+			functionConstraints[funcName].constraints.push( 
+			new Constraint(
+			{
+				ident: child.left.name,
+				value: parseInt(rightHand, 10),
+				funcName: funcName,
+				kind: "integer",
+				operator : child.operator,
+				expression: expression
+			}));
+
+			// case 2: Pass rightHand - 1 to satisfy '<' and '!='
+			functionConstraints[funcName].constraints.push( 
+			new Constraint(
+			{
+				ident: child.left.name,
+				value: parseInt(rightHand, 10) - 1,
+				funcName: funcName,
+				kind: "integer",
+				operator : child.operator,
+				expression: expression
+			}));
+
+			// case 3: Pass rightHand + 1 to satisfy '>' and '!='
+			functionConstraints[funcName].constraints.push( 
+			new Constraint(
+			{
+				ident: child.left.name,
+				value: parseInt(rightHand, 10) + 1,
+				funcName: funcName,
+				kind: "integer",
+				operator : child.operator,
+				expression: expression
+			}));
 	        break;
 	    default:
-	    	//undefined
+	    	functionConstraints[funcName].constraints.push( 
+			new Constraint(
+			{
+				ident: child.left.name,
+				value: rightHand,
+				funcName: funcName,
+				kind: "undefined",
+				operator : child.operator,
+				expression: expression
+			}));
 	}
 }
 
-function parseLogicalExpression(node){
+function parseLogicalExpression(child){
 	if(node.type !== 'LogicalExpression') return false;
 }
 

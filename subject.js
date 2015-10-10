@@ -96,10 +96,10 @@ function blackListNumber(phoneNumber)
 	return false;
 }
 
+
 exports.fileTest = fileTest;
 exports.normalize = normalize;
 exports.format = format;
 exports.inc = inc;
 exports.weird = weird;
 exports.blackListNumber = blackListNumber;
-
