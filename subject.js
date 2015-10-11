@@ -28,7 +28,6 @@ function weird(x, y, z, mode) {
 
 function fileTest(dir, filePath) {
   if (!fs.existsSync(dir)) {
-
     return false;
   }
 
