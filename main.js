@@ -22,7 +22,7 @@ function main() {
 
 	constraints(filePath);
 
-	generateTestCases()
+	generateTestCases(filePath)
 
 }
 
@@ -83,9 +83,9 @@ var mockFileLibrary = {
 	}
 };
 
-function generateTestCases() {
+function generateTestCases(filePath) {
 
-	var content = "var subject = require('./subject.js')\n";
+	var content = "var subject = require('./" + filePath + "')\n";
 	content += "var mock = require('mock-fs');\n";
 
 	for (var funcName in functionConstraints) {
