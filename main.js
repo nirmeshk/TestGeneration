@@ -48,38 +48,37 @@ var functionConstraints = {}
 var mockFileLibrary = {
 
 	pathWithContent: {
-		arg: "'pathContent'",
-		mockString: "{'pathContent': { 'file': 'Some text Content'} }"
+		pathDir: {
+			someDirectory: {
+				file: ''
+			}
+		}
 	},
 
 	pathWithoutContent: {
-		arg: "'pathContent'",
-		mockString: "{'pathContent': {} }"
+		pathDir: {
+			someDirectory: {}
+		}
 	},
 
-	fileExists: {
-		arg: "'pathContent/file'",
-		mockString: "{'pathContent': {'file': 'Some random text' }}"
-	},
-
-	fileNotExists: {
-		arg: "'pathContent/fileNotExists'",
-		mockString: "{'pathContent': {}}" // Leave the directory empty so that file does not exists
-	},
-
-	fileWithoutContent: {
-		arg: "'pathContent/file'",
-		mockString: "{'pathContent': {'file': ''}}"
+	pathNotExists: {
+		pathDir: {}
 	},
 
 	fileWithContent: {
-		arg: "'pathContent/file'",
-		mockString: "{'pathContent': {'file': 'Some random text'}}"
+		pathFile: {
+			someFile: 'Some random text'
+		}
 	},
 
-	pathExists: {
-		arg: "'path/fileExists'",
-		mockString: "{'path/fileExists': {}}"
+	fileWithoutContent: {
+		pathFile: {
+			someFile: ''
+		}
+	},
+
+	fileNotExists: {
+		pathFile: {}
 	}
 };
 
@@ -92,64 +91,54 @@ function generateTestCases(filePath) {
 		// update parameter values based on known constraints.
 		var constraints = functionConstraints[funcName].constraints;
 
-		//Initialize the 
-		var params = {};
-		for (var i = 0; i < functionConstraints[funcName].params.length; i++) {
-			var paramName = functionConstraints[funcName].params[i];
-			params[paramName] = ['\'\''];
-		}
-
-		var mockKind = Object.keys(mockFileLibrary);
-		var isMockingRequired = _.some(constraints, function(c) {
-			return mockKind.indexOf(c.kind) > -1
+		// Handle global constraints...
+		var directoryRead = _.some(constraints, {
+			kind: 'directoryRead'
+		});
+		
+		var fileRead = _.some(constraints, {
+			kind: 'fileRead'
 		});
 
-		if (isMockingRequired) {
-			console.log("Mocking: " + funcName);
-			console.log(constraints)
+		var existSync_ = _.some(constraints, {
+			kind: 'existSync_'
+		});
 
-			var kind = {}
+		if (directoryRead || fileRead || existSync_) {
+			console.log("Mocking Required for : " + funcName);
 
-			var tempParamName = Object.keys(params);
-			for (var i = 0; i < tempParamName.length; i++) {
-				kind[tempParamName[i]] = ['\'\'']
+			var params = {};
+
+			// initialize params
+			for (var i = 0; i < functionConstraints[funcName].params.length; i++) {
+				var paramName = functionConstraints[funcName].params[i];
+				params[paramName] = '\'\'';
 			}
 
+			// plug-in values for parameters
 			for (var c = 0; c < constraints.length; c++) {
 				var constraint = constraints[c];
-				if (params.hasOwnProperty(constraint.ident) && kind.hasOwnProperty(constraint.ident)) {
-					params[constraint.ident].push(constraint.value);
-					kind[constraint.ident].push(constraint.kind);
+				if (params.hasOwnProperty(constraint.ident)) {
+					params[constraint.ident] = constraint.value;
 				}
 			}
 
-			console.log(params);
-			console.log(kind);
+			// Prepare function arguments.
+			var args = Object.keys(params).map(function(k) {
+				return params[k];
+			}).join(",");
 
-			var paramCombinations = util.allPossibleCases(Object.keys(params).map(function(x) {
-				return params[x]
-			}));
+			content += generateMockFsTestCases(directoryRead, fileRead, funcName, args)
 
-			var kindombinations = util.allPossibleCases(Object.keys(kind).map(function(x) {
-				return kind[x]
-			}));
-
-			console.log('####' + funcName)
-			console.log(paramCombinations)
-			console.log(kindombinations)
-
-			for (var i = paramCombinations.length - 1; i >= 0; i--) {
-				for(var j=0; j < kindombinations[i].length; j++){
-					if(mockFileLibrary[kindombinations[i][j]])
-						content += "mock(" + mockFileLibrary[kindombinations[i][j]].mockString + ");\n";
-					else 
-						content +=  "mock({});\n";
-				}	
-				content += "\tsubject.{0}({1});\n".format(funcName, paramCombinations[i].join(',').replace(/\'\'/g, undefined));
-				content += "mock.restore();\n";
-			}
 
 		} else {
+			//Initialize the 
+			var params = {};
+			for (var i = 0; i < functionConstraints[funcName].params.length; i++) {
+				var paramName = functionConstraints[funcName].params[i];
+				params[paramName] = ['\'\''];
+			}
+
 			// handle non-mock based constraints
 			for (var c = 0; c < constraints.length; c++) {
 				var constraint = constraints[c];
@@ -174,33 +163,35 @@ function generateTestCases(filePath) {
 	fs.writeFileSync('test.js', content, "utf8");
 }
 
-function generateMockFsTestCases(kind, funcName, args) {
+function generateMockFsTestCases(directoryRead, fileRead, funcName, args) {
 	var testCase = "";
+
+	var dirConditions = ['pathWithContent', 'pathWithoutContent', 'pathNotExists'];
+	var fileConditions = ['fileWithContent', 'fileWithoutContent', 'fileNotExists'];
+
+	var result = []
+
+	if (directoryRead && !fileRead) {
+		//Just generate the directory structure	
+
+	} else if (!directoryRead && fileRead) {
+		//Just generate the directory structure
+	} else {
+		//Generate all the cases of file and directory mock.
+		result = util.allPossibleCases([dirConditions, fileConditions]);
+		console.log(result);
+	}
+
 	// Build mock file system based on constraints.
 	var mergedFS = {};
-
-	if (kind.pathExists) {
-		for (var attrname in mockFileLibrary.pathExists) {
-			mergedFS[attrname] = mockFileLibrary.pathExists[attrname];
-		}
+	for (var i = 0; i < result.length; i++) {
+		mergedFS.pathDir = mockFileLibrary[result[i][0]].pathDir
+		mergedFS.pathFile = mockFileLibrary[result[i][1]].pathFile
+		testCase += "mock(" + JSON.stringify(mergedFS) + ");\n";
+		testCase += "\tsubject.{0}({1});\n".format(funcName, args);
+		testCase += "mock.restore();\n";
 	}
 
-	if (kind.fileWithContent) {
-		for (var attrname in mockFileLibrary.fileWithContent) {
-			mergedFS[attrname] = mockFileLibrary.fileWithContent[attrname];
-		}
-	}
-
-	if (kind.pathWithContent) {
-		for (var attrname in mockFileLibrary.pathWithContent) {
-			mergedFS[attrname] = mockFileLibrary.pathWithContent[attrname];
-		}
-	}
-
-
-	testCase += "mock(" + JSON.stringify(mergedFS) + ");\n";
-	testCase += "\tsubject.{0}({1});\n".format(funcName, args);
-	testCase += "mock.restore();\n";
 	return testCase;
 }
 
@@ -242,61 +233,19 @@ function parseCallExpression(child, funcName, params, buf) {
 			functionConstraints[funcName].constraints.push(
 				new Constraint({
 					ident: child.arguments[0].name,
-					value: mockFileLibrary.fileWithContent.arg,
+					value: "'pathFile/someFile'",
 					funcName: funcName,
-					kind: "fileWithContent",
-					operator: child.operator,
-					expression: expression
-				}),
+					kind: "fileRead"
+				}));
+			break;
 
-				new Constraint({
-					ident: child.arguments[0].name,
-					value: mockFileLibrary.fileWithoutContent.arg,
-					funcName: funcName,
-					kind: "fileWithoutContent",
-					operator: child.operator,
-					expression: expression
-				}));
-			break;
-		
-		case "existsSync":
-			functionConstraints[funcName].constraints.push(
-				new Constraint({
-					ident: child.arguments[0].name,
-					value: mockFileLibrary.pathExists.arg,
-					funcName: funcName,
-					kind: "pathExists",
-					operator: child.operator,
-					expression: expression
-				}), 
-				new Constraint({
-					ident: child.arguments[0].name,
-					value: '"' + Random.string()(engine, 5) + '"',
-					funcName: funcName,
-					kind: "pathExists",
-					operator: child.operator,
-					expression: expression
-				}));
-			break;
-		
 		case "readdirSync":
 			functionConstraints[funcName].constraints.push(
 				new Constraint({
 					ident: child.arguments[0].name,
-					value: mockFileLibrary.pathWithContent.arg,
+					value: "'pathDir/someDirectory'",
 					funcName: funcName,
-					kind: "pathWithContent",
-					operator: child.operator,
-					expression: expression
-				}),
-
-				new Constraint({
-					ident: child.arguments[0].name,
-					value: mockFileLibrary.pathWithoutContent.arg,
-					funcName: funcName,
-					kind: "pathWithoutContent",
-					operator: child.operator,
-					expression: expression
+					kind: "directoryRead"
 				}));
 			break;
 	}
