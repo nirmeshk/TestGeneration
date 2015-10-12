@@ -100,11 +100,11 @@ function generateTestCases(filePath) {
 			kind: 'fileRead'
 		});
 
-		var existSync_ = _.some(constraints, {
-			kind: 'existSync_'
+		var existsSync_ = _.some(constraints, {
+			kind: 'existsSync'
 		});
 
-		if (directoryRead || fileRead || existSync_) {
+		if (directoryRead || fileRead || existsSync_) {
 			console.log("Mocking Required for : " + funcName);
 
 			var params = {};
@@ -128,7 +128,7 @@ function generateTestCases(filePath) {
 				return params[k];
 			}).join(",");
 
-			content += generateMockFsTestCases(directoryRead, fileRead, funcName, args)
+			content += generateMockFsTestCases(directoryRead, fileRead, existsSync_, funcName, args)
 
 
 		} else {
@@ -163,7 +163,7 @@ function generateTestCases(filePath) {
 	fs.writeFileSync('test.js', content, "utf8");
 }
 
-function generateMockFsTestCases(directoryRead, fileRead, funcName, args) {
+function generateMockFsTestCases(directoryRead, fileRead, existsSync_, funcName, args) {
 	var testCase = "";
 
 	var dirConditions = ['pathWithContent', 'pathWithoutContent', 'pathNotExists'];
@@ -171,11 +171,14 @@ function generateMockFsTestCases(directoryRead, fileRead, funcName, args) {
 
 	var result = []
 
-	if (directoryRead && !fileRead) {
+	if (directoryRead && !fileRead && !existsSync_) {
 		//Just generate the directory structure	
-
-	} else if (!directoryRead && fileRead) {
+		result = [['pathWithContent'], ['pathWithoutContent'], ['pathNotExists']]
+	} else if (!directoryRead && fileRead && !existsSync_) {
 		//Just generate the directory structure
+		result =  [['fileWithContent'], ['fileWithoutContent'], ['fileNotExists']]
+	}else if(existsSync_) {
+		result =  [['fileWithContent'], ['fileWithoutContent'], ['fileNotExists']]
 	} else {
 		//Generate all the cases of file and directory mock.
 		result = util.allPossibleCases([dirConditions, fileConditions]);
@@ -185,11 +188,15 @@ function generateMockFsTestCases(directoryRead, fileRead, funcName, args) {
 	// Build mock file system based on constraints.
 	var mergedFS = {};
 	for (var i = 0; i < result.length; i++) {
-		mergedFS.pathDir = mockFileLibrary[result[i][0]].pathDir
-		mergedFS.pathFile = mockFileLibrary[result[i][1]].pathFile
-		testCase += "mock(" + JSON.stringify(mergedFS) + ");\n";
-		testCase += "\tsubject.{0}({1});\n".format(funcName, args);
-		testCase += "mock.restore();\n";
+		for(var j = 0; j < result[i].length; j++){
+			var pathDir = mockFileLibrary[result[i][j]].pathDir;
+			var pathFile = mockFileLibrary[result[i][j]].pathFile;
+			if(pathDir) mergedFS.pathDir = pathDir
+			if(pathFile) mergedFS.pathFile = pathFile
+			testCase += "mock(" + JSON.stringify(mergedFS) + ");\n";
+			testCase += "\tsubject.{0}({1});\n".format(funcName, args);
+			testCase += "mock.restore();\n";
+		}	
 	}
 
 	return testCase;
@@ -246,6 +253,16 @@ function parseCallExpression(child, funcName, params, buf) {
 					value: "'pathDir/someDirectory'",
 					funcName: funcName,
 					kind: "directoryRead"
+				}));
+			break;
+
+		case "existsSync":
+			functionConstraints[funcName].constraints.push(
+				new Constraint({
+					ident: child.arguments[0].name,
+					value: "'pathFile/someFile'",
+					funcName: funcName,
+					kind: "existsSync_"
 				}));
 			break;
 	}
