@@ -475,6 +475,23 @@ function parseBlockPhoneNumberExpression(child, funcName, params, buf) {
 		}));
 }
 
+function parseIntermediateVar(child, funcName, params, buf) {
+
+	var cond = (child.type == 'BinaryExpression' && child.right.type == 'Literal' && child.left.type == 'Literal');
+
+	if (!cond) return false;
+
+	var righthand = child.right.value;
+	
+	functionConstraints[funcName].constraints.push(
+		new Constraint({
+			ident: params[0],
+			value: '"' + righthand + '"',
+			funcName: funcName,
+			kind: "string"
+		}));
+}
+
 function traverse(object, visitor) {
 	var key, child;
 
