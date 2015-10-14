@@ -161,7 +161,7 @@ function generateTestCases(filePath) {
 				return params[x]
 			}));
 
-			for (var i = 0 ; i < paramCombinations.length; i++) {
+			for (var i = 0; i < paramCombinations.length; i++) {
 				var a = ''
 				if (typeof paramCombinations[i] === 'object')
 					a = paramCombinations[i].join(',')
@@ -184,43 +184,47 @@ function generateMockFsTestCases(directoryRead, fileRead, existsSync_, funcName,
 
 	var result = []
 
-	if (directoryRead && !fileRead && !existsSync_) {
-		//Just generate the directory structure	
-		result = [
-			['pathWithContent'],
-			['pathWithoutContent'],
-			['pathNotExists']
-		]
-	} else if (!directoryRead && fileRead && !existsSync_) {
-		//Just generate the directory structure
-		result = [
-			['fileWithContent'],
-			['fileWithoutContent'],
-			['fileNotExists']
-		]
-	} else if (existsSync_) {
-		result = [
-			['fileWithContent'],
-			['fileWithoutContent'],
-			['fileNotExists']
-		]
-	} else {
-		//Generate all the cases of file and directory mock.
-		result = util.allPossibleCases([dirConditions, fileConditions]);
-		console.log(result);
-	}
-
 	// Build mock file system based on constraints.
 	var mergedFS = {};
-	for (var i = 0; i < result.length; i++) {
-		for (var j = 0; j < result[i].length; j++) {
-			var pathDir = mockFileLibrary[result[i][j]].pathDir;
-			var pathFile = mockFileLibrary[result[i][j]].pathFile;
-			if (pathDir) mergedFS.pathDir = pathDir
-			if (pathFile) mergedFS.pathFile = pathFile
+
+	if (directoryRead || existsSync_) {
+		//Just generate the directory structure	
+		result = ['pathWithContent', 'pathWithoutContent', 'pathNotExists']
+		for (var i = 0; i < result.length; i++) {
+			mergedFS.pathDir = mockFileLibrary[result[i]].pathDir;
 			testCase += "mock(" + JSON.stringify(mergedFS) + ");\n";
 			testCase += "\tsubject.{0}({1});\n".format(funcName, args);
 			testCase += "mock.restore();\n";
+		}
+	}
+
+
+	if (fileRead) {
+		//Just generate the directory structure
+		//Just generate the directory structure	
+		result = ['fileWithContent', 'fileWithoutContent', 'fileNotExists']
+		for (var i = 0; i < result.length; i++) {
+			mergedFS.pathFile = mockFileLibrary[result[i]].pathFile;
+			testCase += "mock(" + JSON.stringify(mergedFS) + ");\n";
+			testCase += "\tsubject.{0}({1});\n".format(funcName, args);
+			testCase += "mock.restore();\n";
+		}
+
+	}
+
+	if (fileRead && directoryRead) {
+		result = util.allPossibleCases([dirConditions, fileConditions]);
+
+		for (var i = 0; i < result.length; i++) {
+			for (var j = 0; j < result[i].length; j++) {
+				var pathDir = mockFileLibrary[result[i][j]].pathDir;
+				var pathFile = mockFileLibrary[result[i][j]].pathFile;
+				if (pathDir) mergedFS.pathDir = pathDir
+				if (pathFile) mergedFS.pathFile = pathFile
+				testCase += "mock(" + JSON.stringify(mergedFS) + ");\n";
+				testCase += "\tsubject.{0}({1});\n".format(funcName, args);
+				testCase += "mock.restore();\n";
+			}
 		}
 	}
 
@@ -445,10 +449,10 @@ function parseUnaryExpression(child, funcName, params, buf) {
 }
 
 function parseBlockPhoneNumberExpression(child, funcName, params, buf) {
-	
+
 	var cond = (funcName == 'blackListNumber' && child.type == 'BinaryExpression' && child.right.type == 'Literal');
 
-	if(!cond) return false;
+	if (!cond) return false;
 
 	var areaCode = child.right.value;
 	var number = faker.phone.phoneNumberFormat();
@@ -457,15 +461,15 @@ function parseBlockPhoneNumberExpression(child, funcName, params, buf) {
 	functionConstraints[funcName].constraints.push(
 		new Constraint({
 			ident: params[0],
-			value: '"' +  number + '"',
+			value: '"' + number + '"',
 			funcName: funcName,
 			kind: "string"
 		}));
-						
+
 	functionConstraints[funcName].constraints.push(
 		new Constraint({
 			ident: params[0],
-			value: '"' + passingNumber  + '"' ,
+			value: '"' + passingNumber + '"',
 			funcName: funcName,
 			kind: "string"
 		}));
