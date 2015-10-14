@@ -477,7 +477,7 @@ function parseBlockPhoneNumberExpression(child, funcName, params, buf) {
 
 function parseIntermediateVar(child, funcName, params, buf) {
 
-	var cond = (child.type == 'BinaryExpression' && child.right.type == 'Literal' && child.left.type == 'Literal');
+	var cond = (child.type == 'BinaryExpression' && child.right.type == 'Literal' && child.left.type == 'Literal' && params.indexOf(child.left.type) == -1);
 
 	if (!cond) return false;
 
@@ -487,6 +487,12 @@ function parseIntermediateVar(child, funcName, params, buf) {
 		new Constraint({
 			ident: params[0],
 			value: '"' + righthand + '"',
+			funcName: funcName,
+			kind: "string"
+		}),
+		new Constraint({
+			ident: params[0],
+			value: '"' + righthand +  Random.string()(engine, rightHand.length) +  '"',
 			funcName: funcName,
 			kind: "string"
 		}));
