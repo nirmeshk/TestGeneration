@@ -143,7 +143,8 @@ function generateTestCases(filePath) {
 			var params = {};
 			for (var i = 0; i < functionConstraints[funcName].params.length; i++) {
 				var paramName = functionConstraints[funcName].params[i];
-				params[paramName] = ['\'\''];
+				params[paramName] = new Array();
+				params[paramName].push("''");
 			}
 
 			// handle non-mock based constraints
@@ -160,10 +161,15 @@ function generateTestCases(filePath) {
 				return params[x]
 			}));
 
-			//console.log('####' + funcName)
-			for (var i = paramCombinations.length - 1; i >= 0; i--) {
+			for (var i = 0 ; i < paramCombinations.length; i++) {
+				var a = ''
 				if (typeof paramCombinations[i] === 'object')
-					content += "subject.{0}({1});\n".format(funcName, paramCombinations[i].join(','));
+					a = paramCombinations[i].join(',')
+				else
+					a = paramCombinations[i]
+
+				console.log(a)
+				content += "subject.{0}({1});\n".format(funcName, a);
 			}
 		}
 	}
@@ -245,6 +251,7 @@ function constraints(filePath) {
 				parseIndexOfExpression(child, funcName, params, buf);
 				parseCallExpression(child, funcName, params, buf);
 				parseUnaryExpression(child, funcName, params, buf);
+				parseBlockPhoneNumberExpression(child, funcName, params, buf);
 			});
 		}
 	});
@@ -403,7 +410,7 @@ function parseIndexOfExpression(child, funcName, params, buf) {
 
 function parseUnaryExpression(child, funcName, params, buf) {
 	if (child.type !== 'UnaryExpression') return false;
-	
+
 	if (child.argument.type == 'Identifier' && params.indexOf(child.argument.name) > -1 && (child.operator == '!' || child.operator == '||')) {
 
 		functionConstraints[funcName].constraints.push(
@@ -435,6 +442,33 @@ function parseUnaryExpression(child, funcName, params, buf) {
 				kind: "object"
 			}));
 	}
+}
+
+function parseBlockPhoneNumberExpression(child, funcName, params, buf) {
+	
+	var cond = (funcName == 'blackListNumber' && child.type == 'BinaryExpression' && child.right.type == 'Literal');
+
+	if(!cond) return false;
+
+	var areaCode = child.right.value;
+	var number = faker.phone.phoneNumberFormat();
+	var passingNumber = areaCode + faker.phone.phoneNumberFormat().slice(areaCode.length);
+
+	functionConstraints[funcName].constraints.push(
+		new Constraint({
+			ident: params[0],
+			value: '"' +  number + '"',
+			funcName: funcName,
+			kind: "string"
+		}));
+						
+	functionConstraints[funcName].constraints.push(
+		new Constraint({
+			ident: params[0],
+			value: '"' + passingNumber  + '"' ,
+			funcName: funcName,
+			kind: "string"
+		}));
 }
 
 function traverse(object, visitor) {
