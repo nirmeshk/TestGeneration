@@ -82,6 +82,12 @@ var mockFileLibrary = {
 	}
 };
 
+function fakeDemo() {
+	console.log(faker.phone.phoneNumber());
+	console.log(faker.phone.phoneNumberFormat());
+	console.log(faker.phone.phoneFormats());
+}
+
 function generateTestCases(filePath) {
 
 	var content = "var subject = require('./" + filePath + "')\n";
@@ -90,12 +96,13 @@ function generateTestCases(filePath) {
 	for (var funcName in functionConstraints) {
 		// update parameter values based on known constraints.
 		var constraints = functionConstraints[funcName].constraints;
+		console.log(constraints)
 
 		// Handle global constraints...
 		var directoryRead = _.some(constraints, {
 			kind: 'directoryRead'
 		});
-		
+
 		var fileRead = _.some(constraints, {
 			kind: 'fileRead'
 		});
@@ -173,12 +180,24 @@ function generateMockFsTestCases(directoryRead, fileRead, existsSync_, funcName,
 
 	if (directoryRead && !fileRead && !existsSync_) {
 		//Just generate the directory structure	
-		result = [['pathWithContent'], ['pathWithoutContent'], ['pathNotExists']]
+		result = [
+			['pathWithContent'],
+			['pathWithoutContent'],
+			['pathNotExists']
+		]
 	} else if (!directoryRead && fileRead && !existsSync_) {
 		//Just generate the directory structure
-		result =  [['fileWithContent'], ['fileWithoutContent'], ['fileNotExists']]
-	}else if(existsSync_) {
-		result =  [['fileWithContent'], ['fileWithoutContent'], ['fileNotExists']]
+		result = [
+			['fileWithContent'],
+			['fileWithoutContent'],
+			['fileNotExists']
+		]
+	} else if (existsSync_) {
+		result = [
+			['fileWithContent'],
+			['fileWithoutContent'],
+			['fileNotExists']
+		]
 	} else {
 		//Generate all the cases of file and directory mock.
 		result = util.allPossibleCases([dirConditions, fileConditions]);
@@ -188,15 +207,15 @@ function generateMockFsTestCases(directoryRead, fileRead, existsSync_, funcName,
 	// Build mock file system based on constraints.
 	var mergedFS = {};
 	for (var i = 0; i < result.length; i++) {
-		for(var j = 0; j < result[i].length; j++){
+		for (var j = 0; j < result[i].length; j++) {
 			var pathDir = mockFileLibrary[result[i][j]].pathDir;
 			var pathFile = mockFileLibrary[result[i][j]].pathFile;
-			if(pathDir) mergedFS.pathDir = pathDir
-			if(pathFile) mergedFS.pathFile = pathFile
+			if (pathDir) mergedFS.pathDir = pathDir
+			if (pathFile) mergedFS.pathFile = pathFile
 			testCase += "mock(" + JSON.stringify(mergedFS) + ");\n";
 			testCase += "\tsubject.{0}({1});\n".format(funcName, args);
 			testCase += "mock.restore();\n";
-		}	
+		}
 	}
 
 	return testCase;
@@ -223,10 +242,13 @@ function constraints(filePath) {
 			// Check for expressions using argument.
 			traverse(node, function(child) {
 				parseBooleanExpression(child, funcName, params, buf);
+				parseIndexOfExpression(child, funcName, params, buf);
 				parseCallExpression(child, funcName, params, buf);
+				parseUnaryExpression(child, funcName, params, buf);
 			});
 		}
 	});
+	// /console.log(functionConstraints);
 }
 
 function parseCallExpression(child, funcName, params, buf) {
@@ -265,34 +287,6 @@ function parseCallExpression(child, funcName, params, buf) {
 					kind: "existsSync_"
 				}));
 			break;
-	}
-
-	if (child.callee.property.name === "indexOf" && child.arguments[0].type == 'Literal') {
-		for (var p = 0; p < params.length; p++) {
-			if (child.callee.object.name == params[p]) {
-
-				functionConstraints[funcName].constraints.push(
-					new Constraint({
-						ident: params[p],
-						// A fake path to a file
-						value: '"' + child.arguments[0].value + '"',
-						funcName: funcName,
-						kind: "string",
-						operator: child.operator,
-						expression: expression
-					}),
-
-					new Constraint({
-						ident: params[p],
-						// A fake path to a file
-						value: '"asdasd' + child.arguments[0].value + '"',
-						funcName: funcName,
-						kind: "string",
-						operator: child.operator,
-						expression: expression
-					}));
-			}
-		}
 	}
 }
 
@@ -381,8 +375,66 @@ function parseBooleanExpression(child, funcName, params, buf) {
 	}
 }
 
-function parseLogicalExpression(child) {
-	if (node.type !== 'LogicalExpression') return false;
+function parseIndexOfExpression(child, funcName, params, buf) {
+	var cond = child.type === 'BinaryExpression' && child.operator == "==" && child.left.type == "CallExpression" && child.left.callee.property && child.left.callee.property.name == "indexOf" && params.indexOf(child.left.callee.object.name) > -1
+
+	if (!cond) return false;
+
+
+	var str = child.left.arguments[0].value;
+	var index = child.right.value;
+	// Generate a random string of 5 times the length of right hand string
+	var randomStr = Random.string()(engine, str.length * 5)
+
+	functionConstraints[funcName].constraints.push(
+		new Constraint({
+			ident: child.left.callee.object.name,
+			value: '"' + randomStr.slice(0, index) + str + randomStr.slice(index) + '"',
+			funcName: funcName,
+			kind: "string"
+		}), new Constraint({
+			ident: child.left.callee.object.name,
+			value: '"' + randomStr + '"',
+			funcName: funcName,
+			kind: "string"
+		}));
+}
+
+
+function parseUnaryExpression(child, funcName, params, buf) {
+	if (child.type !== 'UnaryExpression') return false;
+	
+	if (child.argument.type == 'Identifier' && params.indexOf(child.argument.name) > -1 && (child.operator == '!' || child.operator == '||')) {
+
+		functionConstraints[funcName].constraints.push(
+			new Constraint({
+				ident: child.argument.name,
+				value: true,
+				funcName: funcName,
+				kind: "boolean"
+			}), new Constraint({
+				ident: child.argument.name,
+				value: false,
+				funcName: funcName,
+				kind: "boolean"
+			}));
+	}
+
+	if (child.argument.type == 'MemberExpression' && params.indexOf(child.argument.object.name) > -1 && (child.operator == '!' || child.operator == '||')) {
+
+		functionConstraints[funcName].constraints.push(
+			new Constraint({
+				ident: child.argument.object.name,
+				value: "{" + child.argument.property.name + " :true}",
+				funcName: funcName,
+				kind: "object"
+			}), new Constraint({
+				ident: child.argument.object.name,
+				value: "{" + child.argument.property.name + " :false}",
+				funcName: funcName,
+				kind: "object"
+			}));
+	}
 }
 
 function traverse(object, visitor) {
